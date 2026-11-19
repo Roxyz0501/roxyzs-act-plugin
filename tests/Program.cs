@@ -37,6 +37,29 @@ class Program
     static object Field(Portal p,string name)=>typeof(Portal).GetField(name,Private).GetValue(p);
     static void Call(Portal p,string method,params object[] args)=>typeof(Portal).GetMethod(method,Private).Invoke(p,args);
     static void Assert(bool ok,string message){if(!ok)throw new Exception(message);}
+    static void MeasureUpdateControls(Control control,System.Drawing.Graphics graphics)
+    {
+        if(!string.IsNullOrEmpty(control.Text))graphics.MeasureString(control.Text,control.Font);
+        foreach(Control child in control.Controls)MeasureUpdateControls(child,graphics);
+    }
+    static void CheckPortalRendering(Portal portal)
+    {
+        var pref=(Preferences)Field(portal,"prefs");
+        int original=pref.Language;
+        using(var bmp=new System.Drawing.Bitmap(720,440))
+        using(var g=System.Drawing.Graphics.FromImage(bmp))
+        {
+            foreach(var language in new[]{original,original,0,2,3,1,original})
+            {
+                pref.Language=language;
+                Call(portal,"Build");
+                var page=(TabPage)Field(portal,"updates");
+                MeasureUpdateControls(page,g);
+                page.Size=bmp.Size;
+                page.DrawToBitmap(bmp,page.ClientRectangle);
+            }
+        }
+    }
     static void CheckChildTabs()
     {
         using(var root=new TabPage())
@@ -144,6 +167,7 @@ class Program
                 using(var page=new TabPage())using(var label=new Label())
                 {
                     var p=new Portal(); typeof(Portal).GetField("root",Private).SetValue(p,root);p.InitPlugin(page,label);
+                    CheckPortalRendering(p);
                     var tabs=(TabControl)Field(p,"tabs");
                     Assert(tabs.TabCount==3&&page.Text=="Roxyzs ACT Plugin","initial tabs");
                     var snapshot=File.ReadAllText(cfg);Call(p,"Save");Assert(snapshot==File.ReadAllText(cfg) && !File.Exists(cfg+".bak"),"unchanged write");

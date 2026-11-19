@@ -43,6 +43,7 @@ namespace RoxyzsActPlugin
 
         TabPage config,support;
         PluginUpdatePage updates;
+        string updateLanguage;
         ListView list;
         Label status,feedback;
         Action<Exception> onFailure;
@@ -82,7 +83,8 @@ namespace RoxyzsActPlugin
             surface=new Panel { Dock=DockStyle.Fill, BackColor=Color.FromArgb(241,244,248), Padding=new Padding(8) };
             page.Controls.Add(surface);
             config=new TabPage("Config"); support=new TabPage {AutoScroll=true,BackColor=Color.White};
-            updates=new PluginUpdatePage(Entry.Self.Repo,VersionOf(Entry.Self),prefs.Check,LanguageCode);
+            updateLanguage=LanguageCode;
+            updates=new PluginUpdatePage(Entry.Self.Repo,VersionOf(Entry.Self),prefs.Check,updateLanguage);
             updates.CheckRequested+=(s,e)=>CheckSelf();
             updates.InstallRequested+=(s,e)=>Try(PrepareSelf);
             updates.LaterRequested+=(s,e)=>{SetSelfState(UpdatePageState.Ready,()=>"");tabs.SelectedTab=config;};
@@ -150,7 +152,16 @@ namespace RoxyzsActPlugin
             foreach(var tab in new[]{config,support}) while(tab.Controls.Count>0) tab.Controls[0].Dispose();
             tabs.SetLanguageFont(new[]{"Segoe UI","Meiryo UI","Microsoft YaHei UI","Malgun Gothic"}[prefs.Language]);
             config.Text=L("Config","設定","设置","설정");
-            updates.SetLanguage(LanguageCode); updates.SetCheckOnStartup(prefs.Check); updates.ShowState(selfState,selfMessage()); support.Text=SupportText;
+            // WinForms can retain an equal Font instance. Reapplying the same language
+            // would let the shared page dispose a font still used for measurement.
+            if(updateLanguage!=LanguageCode)
+            {
+                updates.SetLanguage(LanguageCode);
+                updateLanguage=LanguageCode;
+            }
+            updates.SetCheckOnStartup(prefs.Check);
+            updates.ShowState(selfState,selfMessage());
+            support.Text=SupportText;
             list=new ListView { Dock=DockStyle.Fill,View=View.Details,FullRowSelect=true,HideSelection=false,MultiSelect=false };
             list.Columns.Add(L("Plugin","プラグイン","插件","플러그인"),155);
             list.Columns.Add(L("State","状態","状态","상태"),65);
