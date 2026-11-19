@@ -75,7 +75,7 @@ namespace RoxyzsActPlugin
                 {
                     if(response.StatusCode==HttpStatusCode.NotModified)return null;
                     response.EnsureSuccessStatusCode();
-                    var raw=Encoding.UTF8.GetString(await Read(response,65536,token).ConfigureAwait(false));
+                    var raw=Encoding.UTF8.GetString(await Read(response,512*1024,token).ConfigureAwait(false));
                     Catalog.Parse(raw);
                     return Tuple.Create(raw,response.Headers.ETag?.ToString());
                 }
@@ -119,8 +119,9 @@ namespace RoxyzsActPlugin
         public async Task<string> Install(Entry item, Release release, CancellationToken token)
         {
             var version = release.Version.ToString();
-            var expected = item.Prefix + (item.Dll == "SSRename" ? "-" : "-v") + version + ".zip";
             var names = release.assets.Select(a => a.name).ToArray();
+            var expected = new[]{"-v","-"}.Select(separator=>item.Prefix+separator+version+".zip").FirstOrDefault(names.Contains);
+            if (expected==null) throw new InvalidDataException("ZIP");
             var manifest = new[]{expected + ".sha256", Path.ChangeExtension(expected,"sha256"), "SHA256SUMS.txt"}.FirstOrDefault(n => names.Contains(n));
             if (!names.Contains(expected) || manifest == null) throw new InvalidDataException("ZIP / SHA-256");
             var sums = Encoding.UTF8.GetString(await AssetBytes(item,release,manifest,16384,token).ConfigureAwait(false)).TrimStart('\ufeff');

@@ -211,18 +211,30 @@ namespace RoxyzsActPlugin
             Run(async token=>{
                 var data=await packages.FetchCatalog(etag,token);
                 return ()=>{
-                    if(data!=null)
-                    {
-                        var next=Catalog.Parse(data.Item1);
-                        foreach(var removed in entries.Except(next).ToArray())
-                        {
-                            Stop(removed);prefs.Enabled.Remove(removed.Repo);prefs.Versions.Remove(removed.Repo);checkedVersions.Remove(removed);
-                        }
-                        entries=next;prefs.CatalogJson=data.Item1;prefs.CatalogETag=data.Item2;Build();
-                    }
+                    if(data!=null) ApplyCatalog(data.Item1,data.Item2);
                     if(checkPortal)Check(Entry.Self);
                 };
             });
+        }
+        void ApplyCatalog(string raw,string etag)
+        {
+            var next=Catalog.Parse(raw);
+            foreach(var removed in entries.Except(next))
+            {
+                Stop(removed);
+                prefs.Enabled.RemoveAll(repo=>repo==removed.Repo);
+                prefs.Versions.Remove(removed.Repo);
+                checkedVersions.Remove(removed);
+            }
+            foreach(var added in next.Except(entries))
+            {
+                prefs.Enabled.RemoveAll(repo=>repo==added.Repo);
+                prefs.Versions.Remove(added.Repo);
+            }
+            entries=next;
+            prefs.CatalogJson=raw;
+            prefs.CatalogETag=etag;
+            Build();
         }
         void Enable(Entry i)
         {

@@ -37,7 +37,9 @@ jobs:
         run: |
           dotnet build tests/PortalTests.csproj -c Release "-p:ActPath=$env:ACT_PATH" --configfile NuGet.Config
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          tests/bin/Release/net48/PortalTests.exe
+          dotnet build discovery/Inspector.csproj -c Release --configfile NuGet.Config
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          tests/bin/Release/net48/PortalTests.exe --discovery
       - name: Package verified DLL
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh

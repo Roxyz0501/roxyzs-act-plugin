@@ -59,6 +59,14 @@ class Program
                     }
                 }
                 var cfg=Path.Combine(root,"settings.json");File.WriteAllText(cfg,"{\"Language\":1,\"Check\":false,\"Enabled\":[],\"Versions\":{}}");
+                if(args.Contains("--discovery"))
+                {
+                    var test="discovery/test_discovery.py";
+                    using(var child=Process.Start(new ProcessStartInfo("python",test+" \""+packages.Local(item,"1.0.0")+"\""){UseShellExecute=false}))
+                    {
+                        child.WaitForExit();Assert(child.ExitCode==0,"automatic discovery");
+                    }
+                }
                 using(var page=new TabPage())using(var label=new Label())
                 {
                     var p=new Portal(); typeof(Portal).GetField("root",Private).SetValue(p,root);p.InitPlugin(page,label);
@@ -68,8 +76,17 @@ class Program
                     Call(p,"Activate",item,"1.0.0");Assert(tabs.TabCount==4,"enable");
                     Call(p,"Stop",item);Assert(tabs.TabCount==3,"stop");
                     Call(p,"Activate",item,"2.0.0");Assert(tabs.TabPages[3].Controls[0].Text=="2","reload newer code");
+                    var added=new Catalog.Row{Name="New Tool",Repo="new.tool",Dll="NewTool",Prefix="NewTool",Description=new[]{"a","b","c","d"}};
+                    var rows=Entry.All.Select(i=>new Catalog.Row{Name=i.Name,Repo=i.Repo,Dll=i.Dll,Prefix=i.Prefix,Description=i.Description}).Concat(new[]{added});
+                    var prefs=(Preferences)Field(p,"prefs");
+                    prefs.Enabled.Add(added.Repo);
+                    var raw=new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(rows.ToArray());
+                    Call(p,"ApplyCatalog",raw,"test-etag");
+                    Assert(((Entry[])Field(p,"entries")).Any(i=>i.Repo==added.Repo),"new row");
+                    Assert(!prefs.Enabled.Contains(added.Repo)&&prefs.Enabled.Contains(item.Repo)&&tabs.TabCount==4,"new off, existing on");
                     p.DeInitPlugin();Assert(File.ReadAllText(cfg).Contains("2.0.0"),"final save");
                     p.InitPlugin(page,label);Assert(((TabControl)Field(p,"tabs")).TabCount==4,"restore enabled");
+                    Assert(!((Preferences)Field(p,"prefs")).Enabled.Contains(added.Repo),"new remains off after restart");
                     p.DeInitPlugin();
                 }
             }

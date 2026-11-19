@@ -18,15 +18,17 @@ namespace RoxyzsActPlugin
         }
         internal static Entry[] Parse(string json)
         {
-            var rows=new JavaScriptSerializer{MaxJsonLength=65536}.Deserialize<Row[]>(json);
-            if(rows==null||rows.Length>64) throw new InvalidDataException("Catalog");
+            var rows=new JavaScriptSerializer{MaxJsonLength=512*1024}.Deserialize<Row[]>(json);
+            if(rows==null||rows.Length>512) throw new InvalidDataException("Catalog");
             var blocked=new[]{"inventory-ledger-act","mitigation-flytext-act","screenshotmetadata","roxyzs-act-plugin"};
             foreach(var row in rows)
             {
-                if(row==null || !Regex.IsMatch(row.Repo??"",@"\A[a-z0-9][a-z0-9-]{0,79}\z") || blocked.Contains(row.Repo)
-                   || !Regex.IsMatch(row.Dll??"",@"\A[A-Za-z][A-Za-z0-9]{0,63}\z")
+                if(row==null || !Regex.IsMatch(row.Repo??"",@"\A[a-z0-9][a-z0-9_.-]{0,79}\z") || row.Repo.EndsWith(".") || blocked.Contains(row.Repo)
+                   || Regex.IsMatch(row.Repo,@"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)",RegexOptions.IgnoreCase)
+                   || !Regex.IsMatch(row.Dll??"",@"\A[A-Za-z][A-Za-z0-9_.-]{0,63}\z")
+                   || Regex.IsMatch(row.Dll,@"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)",RegexOptions.IgnoreCase)
                    || new[]{"InventoryLedger","MitigationFlytext","ScreenshotMetadata","RoxyzsActPlugin"}.Contains(row.Dll,StringComparer.OrdinalIgnoreCase)
-                   || !Regex.IsMatch(row.Prefix??"",@"\A[A-Za-z][A-Za-z0-9-]{0,79}\z")
+                   || !Regex.IsMatch(row.Prefix??"",@"\A[A-Za-z][A-Za-z0-9_.-]{0,79}\z")
                    || string.IsNullOrWhiteSpace(row.Name) || row.Name.Length>80
                    || row.Description==null || row.Description.Length!=4 || row.Description.Any(v=>string.IsNullOrWhiteSpace(v)||v.Length>512))
                     throw new InvalidDataException("Catalog entry");
