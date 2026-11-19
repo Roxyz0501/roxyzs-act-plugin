@@ -10,7 +10,7 @@
       "在地图上追踪附近角色。",
       "주변 캐릭터를 지도에서 추적합니다."
     ],
-    "Discovery": "d003557804a37f7c82b70a0993543079b38e4008d4ce22191485352b3c63f942"
+    "Discovery": "5d9248dd10fbde5f04bcf35d55a52f2969766d2819ae1df2a3f9e3cc5436e4c3"
   },
   {
     "Name": "Bahamut Guide",
@@ -23,7 +23,7 @@
       "按机制调整绝巴哈图片提醒。",
       "절 바하무트 기믹별 이미지 알림을 조정합니다."
     ],
-    "Discovery": "e398e28627a0c13bf358a644f03860b4020a697104210bc89262f598ae9af4e6"
+    "Discovery": "5984027c3a06fc767b21793cb29438d9d1525c64c3c06420999054f05c4ea807"
   },
   {
     "Name": "Chat Relay",
@@ -36,7 +36,7 @@
       "将聊天和表情转发到 Discord。",
       "채팅과 감정 표현을 Discord로 전송합니다."
     ],
-    "Discovery": "45e7e8c45365d622be703e30c5e0d2d11f8d49da517fb7d286e28ac755e42103"
+    "Discovery": "335013e4442a23f56500fc004cedaa4158980bc4527976f741f9dab2bab164c3"
   },
   {
     "Name": "Food Buff Overlay",
@@ -49,7 +49,7 @@
       "监控食物效果并提醒。",
       "음식 효과를 확인하고 알려줍니다."
     ],
-    "Discovery": "c0c7af7072fcc6fd8f708d0834a2c133afc67db72a8470038ff6b7df9676e766"
+    "Discovery": "4807d0e4bb4db3979484d9289a8d2ea7ee579ba643432274e8d4fb690b9e5141"
   },
   {
     "Name": "PvP Chronicle",
@@ -62,7 +62,7 @@
       "记录并显示 PvP 击杀和助攻。",
       "PvP 처치와 도움을 기록합니다."
     ],
-    "Discovery": "732dc091610033d5b712b8b80251461182343dab076dafad8a3b760174fe79b1"
+    "Discovery": "a27c16974d9bb8192c3547eb32eafacb263a1ace81dde939a2f22e60f7cde39e"
   },
   {
     "Name": "SocialDistance",
@@ -75,7 +75,7 @@
       "显示玩家距离和接近警告。",
       "플레이어 간 거리와 접근 경고를 표시합니다."
     ],
-    "Discovery": "3b40b9023ace94234f0a690c60a49401193f8cae6804133477fbb74db5c4b221"
+    "Discovery": "53404fd3f0c3aacebd9808f1b57a31fd226077bb8553e18c14556e8e411fbe48"
   },
   {
     "Name": "SSRename",
@@ -88,7 +88,7 @@
       "自动重命名游戏截图。",
       "게임 스크린샷 이름을 자동으로 변경합니다."
     ],
-    "Discovery": "9f8b632213de133f4f52dff8b2ac59204fc7c768615d4f4e09fd9533e052e421"
+    "Discovery": "171b6e20264f4bdb219eb3090d29b2b2d2ca200950aafdfa1c423d9eab28a96a"
   },
   {
     "Name": "Target Marker Overlay",
@@ -101,7 +101,7 @@
       "显示目标标记的持有者。",
       "대상 표식이 붙은 캐릭터를 표시합니다."
     ],
-    "Discovery": "07cb23154e48c4621cc3ac2e56faae05590f1a665a27615fa3d80fa160fbe3ad"
+    "Discovery": "14bc9d31e9445b19fe4635e2a022ac800277dc1f04c94346a10e59647b3fc72c"
   },
   {
     "Name": "Timeline Notice Editor",
@@ -114,6 +114,6 @@
       "调整时间轴图片通知的位置。",
       "타임라인 이미지 알림 위치를 조정합니다."
     ],
-    "Discovery": "da6b7513212f2accff75b5dc99e25b53149e67421165ed8f367994cca762744e"
+    "Discovery": "1ee8deeefa737ec4f59a822da3fb92767d9708e364382ab411d3f779025cd291"
   }
 ]
