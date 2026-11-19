@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Version>1.0.0</Version>
+    <Company>Roxyz0501</Company>
+    <Authors>Roxyz0501</Authors>
+    <ActPath Condition="'$(ActPath)' == ''">$(MSBuildProgramFiles32)\Advanced Combat Tracker\Advanced Combat Tracker.exe</ActPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../catalog.json" LogicalName="RoxyzsActPlugin.catalog.json" />
+    <Reference Include="Advanced Combat Tracker"><HintPath>$(ActPath)</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+</Project>

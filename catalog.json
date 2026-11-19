@@ -1,0 +1,110 @@
+[
+  {
+    "Name": "Aether Tracker",
+    "Repo": "aether-tracker-act",
+    "Dll": "CharacterTracker",
+    "Prefix": "Aether-Tracker-ACT",
+    "Description": [
+      "Track nearby characters on a map.",
+      "周囲のキャラクターを地図で追跡します。",
+      "在地图上追踪附近角色。",
+      "주변 캐릭터를 지도에서 추적합니다."
+    ]
+  },
+  {
+    "Name": "Bahamut Guide",
+    "Repo": "bahamut-guide-act",
+    "Dll": "BahamutGuide",
+    "Prefix": "BahamutGuide",
+    "Description": [
+      "Adjust UCoB SPESPE image alerts by mechanic.",
+      "絶バハの画像通知をギミックごとに調整します。",
+      "按机制调整绝巴哈图片提醒。",
+      "절 바하무트 기믹별 이미지 알림을 조정합니다."
+    ]
+  },
+  {
+    "Name": "Chat Relay",
+    "Repo": "chat-relay-act",
+    "Dll": "ChatRelay",
+    "Prefix": "ChatRelay",
+    "Description": [
+      "Forward chat and emotes to Discord.",
+      "チャットとエモートをDiscordに転送します。",
+      "将聊天和表情转发到 Discord。",
+      "채팅과 감정 표현을 Discord로 전송합니다."
+    ]
+  },
+  {
+    "Name": "Food Buff Overlay",
+    "Repo": "food-buff-overlay",
+    "Dll": "FoodBuffOverlay",
+    "Prefix": "FoodBuffOverlay",
+    "Description": [
+      "Monitor your food buff and display reminders.",
+      "食事効果を監視し、必要な時に通知します。",
+      "监控食物效果并提醒。",
+      "음식 효과를 확인하고 알려줍니다."
+    ]
+  },
+  {
+    "Name": "PvP Chronicle",
+    "Repo": "pvp-chronicle-act",
+    "Dll": "PvPChronicle",
+    "Prefix": "PvPChronicle",
+    "Description": [
+      "Record PvP kills and assists.",
+      "PvPのキルとアシストを記録・表示します。",
+      "记录并显示 PvP 击杀和助攻。",
+      "PvP 처치와 도움을 기록합니다."
+    ]
+  },
+  {
+    "Name": "SocialDistance",
+    "Repo": "socialdistance-act-plugin",
+    "Dll": "SocialDistance",
+    "Prefix": "SocialDistance",
+    "Description": [
+      "Display player distances and proximity warnings.",
+      "プレイヤー間の距離と接近警告を表示します。",
+      "显示玩家距离和接近警告。",
+      "플레이어 간 거리와 접근 경고를 표시합니다."
+    ]
+  },
+  {
+    "Name": "SSRename",
+    "Repo": "ssrename",
+    "Dll": "SSRename",
+    "Prefix": "SSRename",
+    "Description": [
+      "Rename FFXIV screenshots automatically.",
+      "FFXIVのスクリーンショットを自動でリネームします。",
+      "自动重命名游戏截图。",
+      "게임 스크린샷 이름을 자동으로 변경합니다."
+    ]
+  },
+  {
+    "Name": "Target Marker Overlay",
+    "Repo": "target-marker-overlay-act",
+    "Dll": "TargetMarkerOverlay",
+    "Prefix": "TargetMarkerOverlay",
+    "Description": [
+      "See which characters have target markers.",
+      "ターゲットマーカーの付与先を表示します。",
+      "显示目标标记的持有者。",
+      "대상 표식이 붙은 캐릭터를 표시합니다."
+    ]
+  },
+  {
+    "Name": "Timeline Notice Editor",
+    "Repo": "timeline-notice-editor-act",
+    "Dll": "TimelineNoticeEditor",
+    "Prefix": "TimelineNoticeEditor",
+    "Description": [
+      "Position image notices in SPESPE timelines.",
+      "SPESPEタイムラインの画像通知の位置を調整します。",
+      "调整时间轴图片通知的位置。",
+      "타임라인 이미지 알림 위치를 조정합니다."
+    ]
+  }
+]

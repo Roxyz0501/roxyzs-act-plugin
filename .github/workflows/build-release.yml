@@ -1,0 +1,69 @@
+name: Build, test, and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Set up .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Download and verify official ACT reference
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://advancedcombattracker.com/download.php?id=57' -OutFile "$env:RUNNER_TEMP\ACTv3.zip"
+          Expand-Archive "$env:RUNNER_TEMP\ACTv3.zip" "$env:RUNNER_TEMP\ACTv3"
+          $act = Get-ChildItem "$env:RUNNER_TEMP\ACTv3" -Recurse -Filter 'Advanced Combat Tracker.exe' | Select-Object -First 1
+          if (-not $act) { throw 'Official ACT archive did not contain Advanced Combat Tracker.exe.' }
+          $name = [Reflection.AssemblyName]::GetAssemblyName($act.FullName)
+          $token = ($name.GetPublicKeyToken() | ForEach-Object { $_.ToString('x2') }) -join ''
+          if ($token -ne 'a946b61e93d97868') { throw 'ACT assembly publisher identity did not match.' }
+          "ACT_PATH=$($act.FullName)" >> $env:GITHUB_ENV
+      - name: Build and test
+        shell: pwsh
+        run: |
+          dotnet build tests/PortalTests.csproj -c Release "-p:ActPath=$env:ACT_PATH" --configfile NuGet.Config
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          tests/bin/Release/net48/PortalTests.exe
+      - name: Package verified DLL
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: ./release.ps1 -Version ($env:GITHUB_REF_NAME.Substring(1))
+      - name: Upload package
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: release
+          path: release/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-test
+    runs-on: windows-2022
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Publish tested assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download $env:GITHUB_RUN_ID --repo $env:GITHUB_REPOSITORY --name release --dir package
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $assets=(Get-ChildItem package -File).FullName
+          gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --title "Roxyzs ACT Plugin $env:GITHUB_REF_NAME" --generate-notes
