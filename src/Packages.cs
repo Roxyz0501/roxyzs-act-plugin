@@ -19,6 +19,7 @@ namespace RoxyzsActPlugin
     {
         public string tag_name { get; set; }
         public string body { get; set; }
+        public bool Limited { get; set; }
         public bool draft { get; set; }
         public bool prerelease { get; set; }
         public Asset[] assets { get; set; }
@@ -26,14 +27,14 @@ namespace RoxyzsActPlugin
     }
     internal sealed class Asset { public string name { get; set; } }
 
-    internal sealed class Packages : IDisposable
+    internal sealed partial class Packages : IDisposable
     {
-        readonly HttpClient client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
-        readonly Dictionary<string, Tuple<string,Release>> cache = new Dictionary<string, Tuple<string,Release>>();
+        readonly HttpClient client;
         readonly string root;
-        public Packages(string root)
+        public Packages(string root,HttpMessageHandler handler=null)
         {
-            this.root = root;
+            this.root=root;
+            client=new HttpClient(handler??new HttpClientHandler{AllowAutoRedirect=false});
             client.Timeout = TimeSpan.FromSeconds(45);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("RoxyzsActPlugin/1.0");
         }
@@ -44,37 +45,16 @@ namespace RoxyzsActPlugin
         }
         public string Local(Entry item, string version) =>
             Path.Combine(root, item.Repo, ParseVersion(version).ToString(), item.Dll + ".dll");
-        internal async Task<Release> Latest(Entry item, CancellationToken token)
-        {
-            using (var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/Roxyz0501/" + item.Repo + "/releases/latest"))
-            {
-                cache.TryGetValue(item.Repo, out var saved);
-                if (saved?.Item1 != null) request.Headers.TryAddWithoutValidation("If-None-Match", saved.Item1);
-                using (var response = await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,token).ConfigureAwait(false))
-                {
-                    if (response.StatusCode == HttpStatusCode.NotModified && saved != null) return saved.Item2;
-                    response.EnsureSuccessStatusCode();
-                    var json = await Read(response, 256 * 1024, token).ConfigureAwait(false);
-                    var release = new JavaScriptSerializer().Deserialize<Release>(Encoding.UTF8.GetString(json));
-                    if (release == null || release.draft || release.prerelease || !Regex.IsMatch(release.tag_name ?? "", @"\Av?\d+\.\d+\.\d+\z") || release.assets == null)
-                        throw new InvalidDataException("Release");
-                    ParseVersion(release.tag_name.TrimStart('v'));
-                    cache[item.Repo] = Tuple.Create(response.Headers.ETag?.ToString(),release);
-                    return release;
-                }
-            }
-        }
         internal async Task<Tuple<string,string>> FetchCatalog(string etag,CancellationToken token)
         {
-            var url="https://api.github.com/repos/Roxyz0501/roxyzs-act-plugin/contents/catalog.json?ref=main";
+            var url="https://raw.githubusercontent.com/Roxyz0501/roxyzs-act-plugin/main/catalog.json";
             using(var request=new HttpRequestMessage(HttpMethod.Get,url))
             {
-                request.Headers.Accept.ParseAdd("application/vnd.github.raw+json");
                 if(!string.IsNullOrEmpty(etag))request.Headers.TryAddWithoutValidation("If-None-Match",etag);
                 using(var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,token).ConfigureAwait(false))
                 {
                     if(response.StatusCode==HttpStatusCode.NotModified)return null;
-                    response.EnsureSuccessStatusCode();
+                    Ensure(response);
                     var raw=Encoding.UTF8.GetString(await Read(response,512*1024,token).ConfigureAwait(false));
                     Catalog.Parse(raw);
                     return Tuple.Create(raw,response.Headers.ETag?.ToString());
@@ -111,15 +91,15 @@ namespace RoxyzsActPlugin
                         throw new InvalidDataException("Redirect");
                     continue;
                 }
-                response.EnsureSuccessStatusCode();
+                Ensure(response);
                 return await Read(response,limit,token).ConfigureAwait(false);
             }
             throw new InvalidDataException("Redirect");
         }
-        public async Task<string> Install(Entry item, Release release, CancellationToken token)
+        async Task<byte[]> VerifiedZip(Entry item, Release release, CancellationToken token)
         {
             var version = release.Version.ToString();
-            var names = release.assets.Select(a => a.name).ToArray();
+            var names = await AssetNames(item,release,token).ConfigureAwait(false);
             var expected = new[]{"-v","-"}.Select(separator=>item.Prefix+separator+version+".zip").FirstOrDefault(names.Contains);
             if (expected==null) throw new InvalidDataException("ZIP");
             var manifest = new[]{expected + ".sha256", Path.ChangeExtension(expected,"sha256"), "SHA256SUMS.txt"}.FirstOrDefault(n => names.Contains(n));
@@ -131,6 +111,17 @@ namespace RoxyzsActPlugin
             using (var sha = SHA256.Create())
                 if (!string.Equals(BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-",""), match.Groups[1].Value,StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("SHA-256");
+            return bytes;
+        }
+        internal async Task<SelfUpdate> PrepareSelf(Release release,CancellationToken token)
+        {
+            var bytes=await VerifiedZip(Entry.Self,release,token).ConfigureAwait(false);
+            return SelfUpdate.Stage(bytes,root,release.Version.ToString(),token);
+        }
+        public async Task<string> Install(Entry item,Release release,CancellationToken token)
+        {
+            var version=release.Version.ToString();
+            var bytes=await VerifiedZip(item,release,token).ConfigureAwait(false);
             var path = Local(item,version);
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";

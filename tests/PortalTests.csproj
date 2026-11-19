@@ -1,4 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><TargetFramework>net48</TargetFramework><OutputType>Exe</OutputType><UseWindowsForms>true</UseWindowsForms><ActPath Condition="'$(ActPath)' == ''">$(MSBuildProgramFiles32)\Advanced Combat Tracker\Advanced Combat Tracker.exe</ActPath></PropertyGroup>
-<ItemGroup><ProjectReference Include="../src/RoxyzsActPlugin.csproj"/><Reference Include="Advanced Combat Tracker"><HintPath>$(ActPath)</HintPath></Reference><Reference Include="System.Web.Extensions"/></ItemGroup>
+<ItemGroup><ProjectReference Include="../src/RoxyzsActPlugin.csproj"/><Reference Include="Advanced Combat Tracker"><HintPath>$(ActPath)</HintPath></Reference><Reference Include="System.Web.Extensions"/><Reference Include="System.Net.Http"/><Reference Include="System.IO.Compression"/></ItemGroup>
 </Project>

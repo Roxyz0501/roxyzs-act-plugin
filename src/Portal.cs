@@ -35,7 +35,8 @@ namespace RoxyzsActPlugin
         Packages packages;
         string saved;
         Panel surface;
-        TabControl tabs;
+        Roxyz.Act.UI.PluginTabs tabs;
+        bool selfScheduled;
         TabPage config,updates,support;
         ListView list;
         Label status,detail,feedback;
@@ -75,21 +76,14 @@ namespace RoxyzsActPlugin
             page.Text=Title;
             surface=new Panel { Dock=DockStyle.Fill, BackColor=Color.FromArgb(241,244,248), Padding=new Padding(8) };
             page.Controls.Add(surface);
-            tabs=new TabControl { Dock=DockStyle.Fill, DrawMode=TabDrawMode.OwnerDrawFixed, ItemSize=new Size(110,30), SizeMode=TabSizeMode.Fixed, ShowToolTips=true };
-            tabs.DrawItem+=(s,e)=>{
-                var p=tabs.TabPages[e.Index];
-                var area=e.Bounds;
-                var color=p==support ? Color.FromArgb(251,224,166) : Color.WhiteSmoke;
-                using(var brush=new SolidBrush(color)) e.Graphics.FillRectangle(brush,area);
-                TextRenderer.DrawText(e.Graphics,p.Text,tabs.Font,area,Color.FromArgb(36,52,71),TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
-                if(e.Index==tabs.SelectedIndex) using(var pen=new Pen(Color.DarkGoldenrod,2)) e.Graphics.DrawLine(pen,area.Left,area.Bottom-2,area.Right,area.Bottom-2);
-            };
+            config=new TabPage("Config"); updates=new TabPage(); support=new TabPage();
+            tabs=new Roxyz.Act.UI.PluginTabs(support){ShowToolTips=true};
             surface.Controls.Add(tabs);
             var line=new Panel { Dock=DockStyle.Top, Height=2, BackColor=Color.Goldenrod };
             surface.Controls.Add(line);
             var header=new Label { Text=Title, Dock=DockStyle.Top, Height=44, Padding=new Padding(12,0,0,0), BackColor=Color.White, ForeColor=Color.FromArgb(36,52,71), TextAlign=ContentAlignment.MiddleLeft };
             surface.Controls.Add(header);
-            config=new TabPage("Config"); updates=new TabPage(); support=new TabPage();
+
             feedback=new Label { Dock=DockStyle.Bottom, Height=25, TextAlign=ContentAlignment.MiddleLeft, AutoEllipsis=true };
             surface.Controls.Add(feedback);
             status.TextChanged+=StatusChanged;
@@ -118,9 +112,13 @@ namespace RoxyzsActPlugin
             if(File.Exists(ConfigPath)) File.Replace(tmp,ConfigPath,ConfigPath+".bak"); else File.Move(tmp,ConfigPath);
             saved=data;
         }
+        string LimitMessage=>L("GitHub request limit. Use the public release.","GitHubのアクセス制限です。公開Releaseから取得できます。","GitHub 请求受限。可使用公开发行版。","GitHub 요청 제한입니다. 공개 릴리스를 사용할 수 있습니다.");
         void Try(Action work)
         {
             try { work(); }
+            catch(RateLimitException) {status.Text=LimitMessage;}
+            catch(System.Net.Http.HttpRequestException) {status.Text=L("Connection failed.","接続に失敗しました。","连接失败。","연결에 실패했습니다.");}
+            catch(OperationCanceledException) {status.Text=L("Request timed out.","通信がタイムアウトしました。","请求超时。","요청 시간이 초과되었습니다.");}
             catch(Exception ex) { status.Text=L("Error","エラー","错误","오류")+" · "+ex.GetBaseException().Message; }
         }
         void StatusChanged(object sender,EventArgs e) { feedback.Text=status.Text; }
@@ -134,6 +132,8 @@ namespace RoxyzsActPlugin
         void Build()
         {
             foreach(var tab in new[]{config,updates,support}) while(tab.Controls.Count>0) tab.Controls[0].Dispose();
+            tabs.SetLanguageFont(new[]{"Segoe UI","Meiryo UI","Microsoft YaHei UI","Malgun Gothic"}[prefs.Language]);
+            config.Text=L("Config","設定","设置","설정");
             updates.Text=UpdateText; support.Text=SupportText;
             list=new ListView { Dock=DockStyle.Fill,View=View.Details,FullRowSelect=true,HideSelection=false,MultiSelect=false };
             list.Columns.Add(L("Plugin","プラグイン","插件","플러그인"),155);
@@ -158,6 +158,8 @@ namespace RoxyzsActPlugin
             target.Items.Add(Title);target.Items.AddRange(entries.Select(i=>i.Name).ToArray());target.SelectedIndex=0;
             target.SelectedIndexChanged+=(s,e)=>ShowRelease();
             actions.Controls.Add(target);
+            var link=new LinkLabel { Text="GitHub",AutoSize=true,Margin=new Padding(6,9,6,3) };
+            link.LinkClicked+=(s,e)=>Try(()=>Open(UpdateTarget.Url));actions.Controls.Add(link);
             Button(actions,L("Check now","今すぐ確認","立即检查","지금 확인"),()=>Check(UpdateTarget));
             Button(actions,L("Apply update","更新を適用","应用更新","업데이트 적용"),()=>Apply(UpdateTarget));
             Button(actions,L("Later","後で","稍后","나중에"),()=>tabs.SelectedTab=config);
@@ -181,8 +183,8 @@ namespace RoxyzsActPlugin
         void ShowRelease()
         {
             var i=UpdateTarget; checkedVersions.TryGetValue(i,out var r);
-            detail.Text=i.Name+Environment.NewLine+L("Current","現在版","当前版本","현재 버전")+"  "+(VersionOf(i)??"—")+Environment.NewLine+
-                L("Latest","最新版","最新版本","최신 버전")+"  "+(r?.tag_name??"—")+Environment.NewLine+Environment.NewLine+(r?.body??"");
+            detail.Text=i.Name+Environment.NewLine+L("Author","作者","作者","제작자")+"  Roxyz0501"+Environment.NewLine+L("Current","現在版","当前版本","현재 버전")+"  "+(VersionOf(i)??"—")+Environment.NewLine+
+                L("Latest","最新版","最新版本","최신 버전")+"  "+(r?.tag_name??"—")+Environment.NewLine+Environment.NewLine+(r?.Limited==true?LimitMessage: r?.body??"");
         }
         void Run(Func<CancellationToken,Task<Action>> job)
         {
@@ -202,14 +204,19 @@ namespace RoxyzsActPlugin
             Try(()=>{status.Text=Title;done.GetAwaiter().GetResult()();});
         }
         void Check(Entry i) => Run(async token=>{
-            var r=await packages.Latest(i,token);
+            var r=await packages.Latest(i,token,VersionOf(i));
             return ()=>{checkedVersions[i]=r;ShowRelease();if(i==Entry.Self&&r.Version>Version.Parse(VersionOf(i)))tabs.SelectedTab=updates;};
         });
         void RefreshCatalog(bool checkPortal)
         {
             var etag=prefs.CatalogJson==null?null:prefs.CatalogETag;
             Run(async token=>{
-                var data=await packages.FetchCatalog(etag,token);
+                Tuple<string,string> data;
+                try { data=await packages.FetchCatalog(etag,token); }
+                catch(Exception ex) when(checkPortal && !token.IsCancellationRequested)
+                {
+                    return ()=>{Try(()=>{throw ex;});Check(Entry.Self);};
+                }
                 return ()=>{
                     if(data!=null) ApplyCatalog(data.Item1,data.Item2);
                     if(checkPortal)Check(Entry.Self);
@@ -277,10 +284,27 @@ namespace RoxyzsActPlugin
             if(!checkedVersions.TryGetValue(i,out var r)) {Check(i);return;}
             string old=VersionOf(i);
             if(old!=null && r.Version<=Packages.ParseVersion(old)){status.Text=L("Up to date","最新版です","已是最新版本","최신 버전입니다");return;}
+            string registered=null,original=null;
+            if(i==Entry.Self)
+            {
+                if(selfScheduled)return;
+                var registration=ActGlobals.oFormActMain?.ActPlugins.FirstOrDefault(p=>ReferenceEquals(p?.pluginObj,this));
+                registered=SelfUpdate.RegisteredPath(registration?.pluginFile?.FullName);
+                original=SelfUpdate.Hash(registered);
+            }
             Run(async token=>{
-                var path=await packages.Install(i,r,token);
+                if(i==Entry.Self)
+                {
+                    var prepared=await packages.PrepareSelf(r,token);
+                    return ()=>{
+                        using(var act=Process.GetCurrentProcess())
+                        using(prepared.Schedule(registered,original,act.Id)){}
+                        selfScheduled=true;
+                        detail.Text=status.Text=L("Exit ACT to install, then restart ACT.","ACTを終了すると自動更新されます。その後ACTを起動してください。","退出 ACT 以自动安装，然后重新启动 ACT。","ACT를 종료하면 자동 설치됩니다. 이후 ACT를 다시 시작하세요.");
+                    };
+                }
+                await packages.Install(i,r,token);
                 return ()=>{
-                    if(i==Entry.Self){detail.Text=L("Disable the portal in ACT and register this verified DLL:","ACTでポータルを無効にして、次の検証済みDLLを登録してください。","在 ACT 停用门户后注册以下 DLL。","ACT에서 포털을 끈 뒤 다음 DLL을 등록하세요.")+Environment.NewLine+path;return;}
                     if(active.ContainsKey(i))
                     {
                         Stop(i);

@@ -18,6 +18,11 @@ class Program
     static void Assert(bool ok,string message){if(!ok)throw new Exception(message);}
     [STAThread] static void Main(string[] args)
     {
+        if(args.Length==2 && args[0]=="--host")
+        {
+            using(var signal=EventWaitHandle.OpenExisting(args[1]))signal.WaitOne(TimeSpan.FromSeconds(30));
+            return;
+        }
         if (!args.Contains("--child"))
         {
             var dir=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"portal-test-"+Guid.NewGuid().ToString("N"));
@@ -35,6 +40,13 @@ class Program
         {
             using(var packages=new Packages(Path.Combine(root,"packages")))
             {
+                UpdateTests.Run(root);
+                if(args.Contains("--verify-self"))
+                {
+                    var release=packages.Latest(Entry.Self,CancellationToken.None,"1.1.0").GetAwaiter().GetResult();
+                    packages.PrepareSelf(release,CancellationToken.None).GetAwaiter().GetResult();
+                    Console.WriteLine("Verified published portal package "+release.tag_name);
+                }
                 foreach(var i in Entry.All)
                 {
                     Assert(i.Description.Length==4,"translations");
