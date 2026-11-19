@@ -202,7 +202,7 @@ namespace RoxyzsActPlugin
             selected=selected??Selected??entries.FirstOrDefault();list.BeginUpdate();list.Items.Clear();
             foreach(var i in entries)
             {
-                var row=new ListViewItem(new[]{i.Name,active.ContainsKey(i)?"ON":"OFF",VersionOf(i)??"—",i.Description[prefs.Language]}){Tag=i};
+                var row=new ListViewItem(new[]{TabName(i),active.ContainsKey(i)?"ON":"OFF",VersionOf(i)??"—",i.Description[prefs.Language]}){Tag=i};
                 if(updatedRepos.Contains(i.Repo)){row.BackColor=Color.FromArgb(218,244,220);row.ForeColor=Color.FromArgb(22,74,39);row.SubItems[1].Text+=" ✓";}
                 list.Items.Add(row);row.Selected=i==selected;
             }

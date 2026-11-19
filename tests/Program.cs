@@ -176,6 +176,11 @@ class Program
                     Assert(tabs.TabCount==4&&page.Text=="Roxyzs ACT Plugin","initial tabs");
                     var snapshot=File.ReadAllText(cfg);Call(p,"Save");Assert(snapshot==File.ReadAllText(cfg) && !File.Exists(cfg+".bak"),"unchanged write");
                     Call(p,"Activate",item,"1.0.0");Assert(tabs.TabCount==5,"enable");
+                    Func<ListViewItem> row = () => ((ListView)Field(p,"list")).Items.Cast<ListViewItem>().Single(r=>item.Equals(r.Tag));
+                    Call(p,"SetTabName",item,"試験名");
+                    Assert(row().Text=="試験名","rename updates list immediately");
+                    Call(p,"SetTabName",item," ");
+                    Assert(row().Text==item.Name && tabs.TabPages[3].Text==item.Name,"blank restores catalog name");
                     Call(p,"SetTabName",item,"Custom");
                     Assert(tabs.TabPages[3].Text=="Custom" && tabs.TabPages[4]==Field(p,"support"),"custom name and support last");
                     Call(p,"Stop",item);Assert(tabs.TabCount==4,"stop");
@@ -235,7 +240,7 @@ class Program
                     Assert(!prefs.Enabled.Contains(added.Repo)&&prefs.Enabled.Contains(item.Repo)&&tabs.TabCount==5,"new off, existing on");
                     p.DeInitPlugin();Assert(File.ReadAllText(cfg).Contains("2.0.0"),"final save");
                     p.InitPlugin(page,label);Assert(((TabControl)Field(p,"tabs")).TabCount==5,"restore enabled");
-                    Assert(((TabControl)Field(p,"tabs")).TabPages[3].Text=="Custom","restore tab name");
+                    Assert(((TabControl)Field(p,"tabs")).TabPages[3].Text=="Custom" && row().Text=="Custom","restore tab and list names");
                     Assert(!((Preferences)Field(p,"prefs")).Enabled.Contains(added.Repo),"new remains off after restart");
                     p.DeInitPlugin();
                 }

@@ -82,7 +82,10 @@ namespace RoxyzsActPlugin
             var name = value.Trim();
             if (name.Length == 0 || name == item.Name) prefs.TabNames.Remove(item.Repo);
             else prefs.TabNames[item.Repo] = name;
-            if (active.TryGetValue(item,out var slot)) slot.Item2.Text = TabName(item);
+            var displayName = TabName(item);
+            if (active.TryGetValue(item,out var slot)) slot.Item2.Text = displayName;
+            foreach (ListViewItem row in list.Items)
+                if (item.Equals(row.Tag)) { row.Text = displayName; break; }
         }
 
         void InsertChildPage(Entry item,TabPage page)
