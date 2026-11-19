@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using RoxyzsActPlugin;
 using System;
 using System.CodeDom.Compiler;
@@ -69,7 +70,7 @@ class Program
             root.Controls.Add(strip);
             var normal=new TabPage("Display");
             var hidden=new TabPage("Updates");
-            strip.TabPages.AddRange(new[]{normal,hidden,new TabPage("支援")});
+            strip.TabPages.AddRange(new[]{normal,hidden,new TabPage("支援"),new TabPage("언어")});
             ChildTabs.HideManagementPages(root);
             Assert(strip.TabCount==1&&strip.TabPages[0]==normal&&!hidden.IsDisposed,"hide child management pages");
             var late=new TabPage();strip.TabPages.Add(late);late.Text="후원";
@@ -146,13 +147,14 @@ class Program
                     }
                 }
                 var item=Entry.All[0];
+                foreach (var fixture in Entry.All.Take(2))
                 for(int v=1;v<=2;v++)
                 {
-                    var path=packages.Local(item,v+".0.0"); Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    var path=packages.Local(fixture,v+".0.0"); Directory.CreateDirectory(Path.GetDirectoryName(path));
                     using(var compiler=new CSharpCodeProvider())
                     {
                         var options=new CompilerParameters(new[]{"System.dll","System.Windows.Forms.dll",typeof(IActPluginV1).Assembly.Location},path);
-                        var output=compiler.CompileAssemblyFromSource(options,"using System.Windows.Forms;using Advanced_Combat_Tracker;[assembly:System.Reflection.AssemblyVersion(\""+v+".0.0.0\")] public class TestPlugin:IActPluginV1{public void InitPlugin(TabPage p,Label s){s.Text=\""+v+"\";} public void DeInitPlugin(){}}");
+                        var output=compiler.CompileAssemblyFromSource(options,"using System.Windows.Forms;using Advanced_Combat_Tracker;[assembly:System.Reflection.AssemblyVersion(\""+v+".0.0.0\")] public class TestPlugin:IActPluginV1{TabPage page;public void SetHostedLanguage(string code){page.AccessibleDescription=code;} public void InitPlugin(TabPage p,Label s){page=p;s.Text=\""+v+"\";} public void DeInitPlugin(){}}");
                         Assert(!output.Errors.HasErrors,"fixture compiler");
                     }
                 }
@@ -167,14 +169,47 @@ class Program
                 }
                 using(var page=new TabPage())using(var label=new Label())
                 {
+                    page.Size=new System.Drawing.Size(900,600);
                     var p=new Portal(); typeof(Portal).GetField("root",Private).SetValue(p,root);p.InitPlugin(page,label);
                     CheckPortalRendering(p);
                     var tabs=(TabControl)Field(p,"tabs");
-                    Assert(tabs.TabCount==3&&page.Text=="Roxyzs ACT Plugin","initial tabs");
+                    Assert(tabs.TabCount==4&&page.Text=="Roxyzs ACT Plugin","initial tabs");
                     var snapshot=File.ReadAllText(cfg);Call(p,"Save");Assert(snapshot==File.ReadAllText(cfg) && !File.Exists(cfg+".bak"),"unchanged write");
-                    Call(p,"Activate",item,"1.0.0");Assert(tabs.TabCount==4,"enable");
-                    Call(p,"Stop",item);Assert(tabs.TabCount==3,"stop");
+                    Call(p,"Activate",item,"1.0.0");Assert(tabs.TabCount==5,"enable");
+                    Call(p,"SetTabName",item,"Custom");
+                    Assert(tabs.TabPages[3].Text=="Custom" && tabs.TabPages[4]==Field(p,"support"),"custom name and support last");
+                    Call(p,"Stop",item);Assert(tabs.TabCount==4,"stop");
                     Call(p,"Activate",item,"1.0.0");
+                    var other=Entry.All[1];
+                    Call(p,"Activate",other,"1.0.0");
+                    var first=tabs.GetTabRect(4);
+                    var second=tabs.GetTabRect(3);
+                    foreach(var evt in new[]{"OnMouseDown","OnMouseMove","OnMouseUp"})
+                    {
+                        var rect=evt=="OnMouseDown" ? first : second;
+                        typeof(Control).GetMethod(evt,Private).Invoke(tabs,new object[]{new MouseEventArgs(
+                            MouseButtons.Left,1,rect.Left+rect.Width/2,rect.Top+rect.Height/2,0)});
+                    }
+                    Assert(tabs.TabPages[3].Text==other.Name && tabs.TabPages[4].Text=="Custom","drag order");
+                    Call(p,"Stop",other);
+                    Call(p,"Activate",other,"1.0.0");
+                    Assert(tabs.TabPages[3].Text==other.Name && tabs.TabPages[5]==Field(p,"support"),"restore position on enable");
+                    Call(p,"Stop",other);
+                    ((Preferences)Field(p,"prefs")).Enabled.Remove(other.Repo);
+                    ((Preferences)Field(p,"prefs")).Versions.Remove(other.Repo);
+                    var languagePage=(TabPage)Field(p,"languagePage");
+                    tabs.SelectedTab=languagePage;
+                    var selector=(ComboBox)languagePage.Controls[0].Controls[0];
+                    foreach(var index in new[]{2,0,3,1})
+                    {
+                        selector.SelectedIndex=index;
+                        Assert(((Preferences)Field(p,"prefs")).Language==index && tabs.TabPages[3].AccessibleDescription==Roxyz.Act.UI.PluginLanguagePage.Codes[index],"child follows language page");
+                        using(var image=new System.Drawing.Bitmap(500,300)){
+                            languagePage.Size=image.Size;
+                            languagePage.DrawToBitmap(image,new System.Drawing.Rectangle(System.Drawing.Point.Empty,image.Size));
+                        }
+                    }
+                    tabs.SelectedTab=(TabPage)Field(p,"config");
                     var net=new ChildUpdateTests(item,packages.Local(item,"2.0.0"));
                     ((Packages)Field(p,"packages")).Dispose();
                     typeof(Portal).GetField("packages",Private).SetValue(p,new Packages(Path.Combine(root,"packages"),net));
@@ -184,6 +219,9 @@ class Program
                     while(Field(p,"worker")!=null&&timeout.ElapsedMilliseconds<10000){Call(p,"Finish");Thread.Sleep(5);}
                     Assert(Field(p,"worker")==null&&net.AssetRequests==2&&net.HeadRequests==2,"batch continued after a failed item");
                     Assert(tabs.SelectedTab==currentTab&&tabs.TabPages[3].Controls[0].Text=="2","hot update in Config: "+label.Text);
+                    Assert(((HashSet<string>)Field(p,"updatedRepos")).SetEquals(new[]{item.Repo}),"only successfully updated rows highlighted");
+                    Call(p,"ClearHighlights");
+                    Assert(((HashSet<string>)Field(p,"updatedRepos")).Count==0,"clear highlights");
                     Call(p,"UpdateChildren",(object)new[]{item});
                     while(Field(p,"worker")!=null&&timeout.ElapsedMilliseconds<10000){Call(p,"Finish");Thread.Sleep(5);}
                     Assert(net.AssetRequests==2&&net.HeadRequests==2,"up to date individual update reuses release check");
@@ -194,9 +232,10 @@ class Program
                     var raw=new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(rows.ToArray());
                     Call(p,"ApplyCatalog",raw,"test-etag");
                     Assert(((Entry[])Field(p,"entries")).Any(i=>i.Repo==added.Repo),"new row");
-                    Assert(!prefs.Enabled.Contains(added.Repo)&&prefs.Enabled.Contains(item.Repo)&&tabs.TabCount==4,"new off, existing on");
+                    Assert(!prefs.Enabled.Contains(added.Repo)&&prefs.Enabled.Contains(item.Repo)&&tabs.TabCount==5,"new off, existing on");
                     p.DeInitPlugin();Assert(File.ReadAllText(cfg).Contains("2.0.0"),"final save");
-                    p.InitPlugin(page,label);Assert(((TabControl)Field(p,"tabs")).TabCount==4,"restore enabled");
+                    p.InitPlugin(page,label);Assert(((TabControl)Field(p,"tabs")).TabCount==5,"restore enabled");
+                    Assert(((TabControl)Field(p,"tabs")).TabPages[3].Text=="Custom","restore tab name");
                     Assert(!((Preferences)Field(p,"prefs")).Enabled.Contains(added.Repo),"new remains off after restart");
                     p.DeInitPlugin();
                 }

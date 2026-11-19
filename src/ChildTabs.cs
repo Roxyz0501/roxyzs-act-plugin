@@ -8,7 +8,7 @@ namespace RoxyzsActPlugin
     internal static class ChildTabs
     {
         static readonly HashSet<string> management = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        { "Update","Updates","更新","업데이트","Support","支援","支持","후원" };
+        { "Update","Updates","更新","업데이트","Support","支援","支持","후원","Language","言語","语言","언어" };
 
         internal static void HideManagementPages(Control root)
         {

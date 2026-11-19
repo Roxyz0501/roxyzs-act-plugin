@@ -22,6 +22,8 @@ namespace RoxyzsActPlugin
         public string CatalogJson { get; set; }
         public string CatalogETag { get; set; }
         public Dictionary<string,string> Versions { get; set; } = new Dictionary<string,string>();
+        public List<string> TabOrder { get; set; } = new List<string>();
+        public Dictionary<string,string> TabNames { get; set; } = new Dictionary<string,string>();
         public List<string> Enabled { get; set; } = new List<string>();
     }
 
@@ -42,6 +44,10 @@ namespace RoxyzsActPlugin
         Func<string> selfMessage=()=>"";
 
         TabPage config,support;
+        PluginLanguagePage languagePage;
+        readonly HashSet<string> updatedRepos = new HashSet<string>();
+        Entry dragEntry;
+        Point dragOrigin;
         PluginUpdatePage updates;
         string updateLanguage;
         ListView list;
@@ -70,6 +76,8 @@ namespace RoxyzsActPlugin
                     prefs=json.Deserialize<Preferences>(File.ReadAllText(ConfigPath)) ?? new Preferences();
                     if (prefs.Versions==null) prefs.Versions=new Dictionary<string,string>();
                     if (prefs.Enabled==null) prefs.Enabled=new List<string>();
+                    if(prefs.TabNames==null)prefs.TabNames=new Dictionary<string,string>();
+                    if(prefs.TabOrder==null)prefs.TabOrder=new List<string>();
                     saved=Snapshot();
                 }
             }
@@ -101,7 +109,17 @@ namespace RoxyzsActPlugin
             feedback=new Label { Dock=DockStyle.Bottom, Height=25, TextAlign=ContentAlignment.MiddleLeft, AutoEllipsis=true };
             surface.Controls.Add(feedback);
             status.TextChanged+=StatusChanged;
-            tabs.TabPages.AddRange(new[]{config,updates,support});
+            languagePage=new PluginLanguagePage(LanguageCode);
+            languagePage.LanguageChanged+=(s,e)=>{
+                prefs.Language=Array.IndexOf(PluginLanguagePage.Codes,languagePage.LanguageCode);
+                Build();
+                foreach(var slot in active.Values.ToArray()) Try(()=>ApplyLanguage(slot.Item1,slot.Item2));
+            };
+            tabs.AddContentPage(config);
+            tabs.AddContentPage(languagePage);
+            tabs.AddContentPage(updates);
+            tabs.AddContentPage(support);
+            EnableTabDragging();
             Build();
             foreach(var item in entries.Where(i=>prefs.Enabled.Contains(i.Repo)))
                 Try(()=>Start(item,VersionOf(item)));
@@ -114,6 +132,7 @@ namespace RoxyzsActPlugin
         }
         string Snapshot() => json.Serialize(new SortedDictionary<string,object>(StringComparer.Ordinal) {
             {"Language",prefs.Language},{"Check",prefs.Check},{"CatalogJson",prefs.CatalogJson},{"CatalogETag",prefs.CatalogETag},
+            {"TabOrder",prefs.TabOrder},{"TabNames",new SortedDictionary<string,string>(prefs.TabNames,StringComparer.Ordinal)},
             {"Versions",new SortedDictionary<string,string>(prefs.Versions,StringComparer.Ordinal)},{"Enabled",prefs.Enabled.OrderBy(k=>k,StringComparer.Ordinal).ToArray()}
         });
         void Save()
@@ -152,8 +171,7 @@ namespace RoxyzsActPlugin
             foreach(var tab in new[]{config,support}) while(tab.Controls.Count>0) tab.Controls[0].Dispose();
             tabs.SetLanguageFont(new[]{"Segoe UI","Meiryo UI","Microsoft YaHei UI","Malgun Gothic"}[prefs.Language]);
             config.Text=L("Config","設定","设置","설정");
-            // WinForms can retain an equal Font instance. Reapplying the same language
-            // would let the shared page dispose a font still used for measurement.
+            languagePage.SetLanguage(LanguageCode);
             if(updateLanguage!=LanguageCode)
             {
                 updates.SetLanguage(LanguageCode);
@@ -169,16 +187,13 @@ namespace RoxyzsActPlugin
             list.Columns.Add(L("Description","機能","功能","기능"),420);
             config.Controls.Add(list);
             var bar=Bar(); config.Controls.Add(bar);
-            var language=new ComboBox { DropDownStyle=ComboBoxStyle.DropDownList,Width=100 };
-            language.Items.AddRange(new[]{"English","日本語","简体中文","한국어"}); language.SelectedIndex=prefs.Language;
-            language.SelectedIndexChanged+=(s,e)=>{prefs.Language=language.SelectedIndex; Build();};
-            bar.Controls.Add(language);
             Button(bar,L("Enable","オン","启用","켜기"),()=>{var i=Selected;if(i!=null) Enable(i);});
             Button(bar,L("Disable","オフ","停用","끄기"),()=>{var i=Selected;if(i!=null){Stop(i);prefs.Enabled.Remove(i.Repo);RefreshList(i);}});
             Button(bar,L("Update selected","個別更新","更新所选","선택 업데이트"),()=>{var i=Selected;if(i!=null)UpdateChildren(new[]{i});});
             Button(bar,L("Update all installed","一括更新","更新全部已安装插件","설치된 항목 모두 업데이트"),()=>UpdateChildren(entries.Where(i=>VersionOf(i)!=null).ToArray()));
-            Button(bar,L("Refresh list","一覧を更新","刷新列表","목록 새로 고침"),()=>RefreshCatalog(false));
+            Button(bar,L("Refresh list","一覧を更新","刷新列表","목록 새로 고침"),()=>{ClearHighlights();RefreshCatalog(false);});
             Button(bar,"GitHub",()=>{if(Selected!=null) Open(Selected.Url);});
+            AddRenameControls(bar);
             support.Controls.Add(BuildSupportLayout());
             RefreshList();
         }
@@ -188,6 +203,7 @@ namespace RoxyzsActPlugin
             foreach(var i in entries)
             {
                 var row=new ListViewItem(new[]{i.Name,active.ContainsKey(i)?"ON":"OFF",VersionOf(i)??"—",i.Description[prefs.Language]}){Tag=i};
+                if(updatedRepos.Contains(i.Repo)){row.BackColor=Color.FromArgb(218,244,220);row.ForeColor=Color.FromArgb(22,74,39);row.SubItems[1].Text+=" ✓";}
                 list.Items.Add(row);row.Selected=i==selected;
             }
             list.EndUpdate();
@@ -258,6 +274,7 @@ namespace RoxyzsActPlugin
                 prefs.Enabled.RemoveAll(repo=>repo==removed.Repo);
                 prefs.Versions.Remove(removed.Repo);
                 checkedVersions.Remove(removed);
+                prefs.TabNames.Remove(removed.Repo);prefs.TabOrder.RemoveAll(r=>r==removed.Repo);updatedRepos.Remove(removed.Repo);
             }
             foreach(var added in next.Except(entries))
             {
@@ -351,7 +368,7 @@ namespace RoxyzsActPlugin
                                 try{Start(item,release.Version.ToString());}catch{Start(item,old);throw;}
                             }
                             prefs.Versions[item.Repo]=release.Version.ToString();
-                            updated++;RefreshList(item);
+                            updatedRepos.Add(item.Repo);updated++;RefreshList(item);
                         }
                         else unchanged++;
                         next(index+1);
@@ -375,7 +392,7 @@ namespace RoxyzsActPlugin
             var plugin=(IActPluginV1)Activator.CreateInstance(type);
             var page=new TabPage(i.Name);
             var label=new Label { Dock=DockStyle.Bottom,Height=22,AutoEllipsis=true };
-            tabs.TabPages.Add(page);
+            InsertChildPage(i,page);
             try
             {
                 var guideDirectory=Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(path)),"GuideData");
@@ -389,9 +406,11 @@ namespace RoxyzsActPlugin
                     }
                 }
                 ManagedPluginHost.Initialize(plugin,page,label,path,Path.GetDirectoryName(root),guideDirectory);
+                ApplyLanguage(plugin,page);
                 ChildTabs.HideManagementPages(page);
-                page.Controls.Add(label);page.Text=i.Name;page.ToolTipText=i.Name;
+                page.Controls.Add(label);page.Text=TabName(i);page.ToolTipText=i.Name;
                 active.Add(i,Tuple.Create(plugin,page,label));
+                if(!prefs.TabOrder.Contains(i.Repo)) prefs.TabOrder.Add(i.Repo);
             }
             catch { try {plugin.DeInitPlugin();} finally {page.Dispose();label.Dispose();} throw; }
         }
@@ -412,7 +431,7 @@ namespace RoxyzsActPlugin
                 worker=null;cancel.Dispose();cancel=null;
             }
             foreach(var i in active.Keys.ToArray())Try(()=>Stop(i));
-            Try(Save); status.TextChanged-=StatusChanged; packages?.Dispose();surface?.Dispose();checkedVersions.Clear();
+            Try(Save); status.TextChanged-=StatusChanged; packages?.Dispose();surface?.Dispose();checkedVersions.Clear();updatedRepos.Clear();dragEntry=null;
         }
     }
 }
