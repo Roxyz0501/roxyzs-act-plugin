@@ -37,6 +37,23 @@ class Program
     static object Field(Portal p,string name)=>typeof(Portal).GetField(name,Private).GetValue(p);
     static void Call(Portal p,string method,params object[] args)=>typeof(Portal).GetMethod(method,Private).Invoke(p,args);
     static void Assert(bool ok,string message){if(!ok)throw new Exception(message);}
+    static void CheckChildTabs()
+    {
+        using(var root=new TabPage())
+        using(var strip=new TabControl())
+        {
+            root.Controls.Add(strip);
+            var normal=new TabPage("Display");
+            var hidden=new TabPage("Updates");
+            strip.TabPages.AddRange(new[]{normal,hidden,new TabPage("支援")});
+            ChildTabs.HideManagementPages(root);
+            Assert(strip.TabCount==1&&strip.TabPages[0]==normal&&!hidden.IsDisposed,"hide child management pages");
+            var late=new TabPage();strip.TabPages.Add(late);late.Text="후원";
+            Assert(strip.TabCount==1,"late localized management tab");
+            strip.Dispose();Assert(hidden.IsDisposed&&late.IsDisposed,"hidden pages released");
+        }
+    }
+
     static void VerifyGuide(string dll,string root)
     {
         var type=Assembly.LoadFile(dll).GetType("BahamutGuide.BahamutGuidePlugin",true);
@@ -76,6 +93,7 @@ class Program
         {
             using(var packages=new Packages(Path.Combine(root,"packages")))
             {
+                CheckChildTabs();
                 RegistryCompatibility(root);
                 UpdateTests.Run(root);
                 if(args.Contains("--verify-self"))
@@ -131,7 +149,19 @@ class Program
                     var snapshot=File.ReadAllText(cfg);Call(p,"Save");Assert(snapshot==File.ReadAllText(cfg) && !File.Exists(cfg+".bak"),"unchanged write");
                     Call(p,"Activate",item,"1.0.0");Assert(tabs.TabCount==4,"enable");
                     Call(p,"Stop",item);Assert(tabs.TabCount==3,"stop");
-                    Call(p,"Activate",item,"2.0.0");Assert(tabs.TabPages[3].Controls[0].Text=="2","reload newer code");
+                    Call(p,"Activate",item,"1.0.0");
+                    var net=new ChildUpdateTests(item,packages.Local(item,"2.0.0"));
+                    ((Packages)Field(p,"packages")).Dispose();
+                    typeof(Portal).GetField("packages",Private).SetValue(p,new Packages(Path.Combine(root,"packages"),net));
+                    var currentTab=tabs.SelectedTab;
+                    Call(p,"UpdateChildren",(object)new[]{Entry.All[1],item});
+                    var timeout=Stopwatch.StartNew();
+                    while(Field(p,"worker")!=null&&timeout.ElapsedMilliseconds<10000){Call(p,"Finish");Thread.Sleep(5);}
+                    Assert(Field(p,"worker")==null&&net.AssetRequests==2&&net.HeadRequests==2,"batch continued after a failed item");
+                    Assert(tabs.SelectedTab==currentTab&&tabs.TabPages[3].Controls[0].Text=="2","hot update in Config: "+label.Text);
+                    Call(p,"UpdateChildren",(object)new[]{item});
+                    while(Field(p,"worker")!=null&&timeout.ElapsedMilliseconds<10000){Call(p,"Finish");Thread.Sleep(5);}
+                    Assert(net.AssetRequests==2&&net.HeadRequests==2,"up to date individual update reuses release check");
                     var added=new Catalog.Row{Name="New Tool",Repo="new.tool",Dll="NewTool",Prefix="NewTool",Description=new[]{"a","b","c","d"}};
                     var rows=Entry.All.Select(i=>new Catalog.Row{Name=i.Name,Repo=i.Repo,Dll=i.Dll,Prefix=i.Prefix,Description=i.Description}).Concat(new[]{added});
                     var prefs=(Preferences)Field(p,"prefs");

@@ -1,4 +1,5 @@
 using Advanced_Combat_Tracker;
+using Roxyz.Act.UI;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -24,7 +25,7 @@ namespace RoxyzsActPlugin
         public List<string> Enabled { get; set; } = new List<string>();
     }
 
-    public sealed class Portal : IActPluginV1
+    public sealed partial class Portal : IActPluginV1
     {
         const string Title = "Roxyzs ACT Plugin";
         readonly string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Advanced Combat Tracker","Config","RoxyzsActPlugin");
@@ -37,10 +38,14 @@ namespace RoxyzsActPlugin
         Panel surface;
         Roxyz.Act.UI.PluginTabs tabs;
         bool selfScheduled;
-        TabPage config,updates,support;
+        UpdatePageState selfState;
+        Func<string> selfMessage=()=>"";
+
+        TabPage config,support;
+        PluginUpdatePage updates;
         ListView list;
-        Label status,detail,feedback;
-        ComboBox target;
+        Label status,feedback;
+        Action<Exception> onFailure;
         System.Windows.Forms.Timer saveTimer,completion;
         Task<Action> worker;
         Entry[] entries;
@@ -50,7 +55,7 @@ namespace RoxyzsActPlugin
         string UpdateText => L("Update","更新","更新","업데이트");
         string SupportText => L("Support","支援","支持","후원");
         Entry Selected => list.SelectedItems.Count == 0 ? null : (Entry)list.SelectedItems[0].Tag;
-        Entry UpdateTarget => target.SelectedIndex <= 0 ? Entry.Self : entries[target.SelectedIndex-1];
+        string LanguageCode => new[]{"en","ja","zh","ko"}[prefs.Language];
         string VersionOf(Entry e) => e == Entry.Self ? typeof(Portal).Assembly.GetName().Version.ToString(3) : prefs.Versions.TryGetValue(e.Repo,out var v) ? v : null;
 
         public void InitPlugin(TabPage page, Label label)
@@ -76,7 +81,14 @@ namespace RoxyzsActPlugin
             page.Text=Title;
             surface=new Panel { Dock=DockStyle.Fill, BackColor=Color.FromArgb(241,244,248), Padding=new Padding(8) };
             page.Controls.Add(surface);
-            config=new TabPage("Config"); updates=new TabPage(); support=new TabPage();
+            config=new TabPage("Config"); support=new TabPage {AutoScroll=true,BackColor=Color.White};
+            updates=new PluginUpdatePage(Entry.Self.Repo,VersionOf(Entry.Self),prefs.Check,LanguageCode);
+            updates.CheckRequested+=(s,e)=>CheckSelf();
+            updates.InstallRequested+=(s,e)=>Try(PrepareSelf);
+            updates.LaterRequested+=(s,e)=>{SetSelfState(UpdatePageState.Ready,()=>"");tabs.SelectedTab=config;};
+            updates.StartupChanged+=(s,e)=>prefs.Check=updates.CheckOnStartup;
+            selfScheduled=false;
+            SetSelfState(UpdatePageState.Ready,()=>"");
             tabs=new Roxyz.Act.UI.PluginTabs(support){ShowToolTips=true};
             surface.Controls.Add(tabs);
             var line=new Panel { Dock=DockStyle.Top, Height=2, BackColor=Color.Goldenrod };
@@ -116,10 +128,14 @@ namespace RoxyzsActPlugin
         void Try(Action work)
         {
             try { work(); }
-            catch(RateLimitException) {status.Text=LimitMessage;}
-            catch(System.Net.Http.HttpRequestException) {status.Text=L("Connection failed.","接続に失敗しました。","连接失败。","연결에 실패했습니다.");}
-            catch(OperationCanceledException) {status.Text=L("Request timed out.","通信がタイムアウトしました。","请求超时。","요청 시간이 초과되었습니다.");}
-            catch(Exception ex) { status.Text=L("Error","エラー","错误","오류")+" · "+ex.GetBaseException().Message; }
+            catch(Exception ex){status.Text=ErrorText(ex);}
+        }
+        string ErrorText(Exception ex)
+        {
+            if(ex is RateLimitException)return LimitMessage;
+            if(ex is System.Net.Http.HttpRequestException)return L("Connection failed.","接続に失敗しました。","连接失败。","연결에 실패했습니다.");
+            if(ex is OperationCanceledException)return L("Request timed out.","通信がタイムアウトしました。","请求超时。","요청 시간이 초과되었습니다.");
+            return L("Error","エラー","错误","오류")+" · "+ex.GetBaseException().Message;
         }
         void StatusChanged(object sender,EventArgs e) { feedback.Text=status.Text; }
         static FlowLayoutPanel Bar() => new FlowLayoutPanel { Dock=DockStyle.Top,AutoSize=true,Padding=new Padding(4),WrapContents=true };
@@ -131,10 +147,10 @@ namespace RoxyzsActPlugin
         void Open(string url) { Process.Start(new ProcessStartInfo(url){ UseShellExecute=true }); }
         void Build()
         {
-            foreach(var tab in new[]{config,updates,support}) while(tab.Controls.Count>0) tab.Controls[0].Dispose();
+            foreach(var tab in new[]{config,support}) while(tab.Controls.Count>0) tab.Controls[0].Dispose();
             tabs.SetLanguageFont(new[]{"Segoe UI","Meiryo UI","Microsoft YaHei UI","Malgun Gothic"}[prefs.Language]);
             config.Text=L("Config","設定","设置","설정");
-            updates.Text=UpdateText; support.Text=SupportText;
+            updates.SetLanguage(LanguageCode); updates.SetCheckOnStartup(prefs.Check); updates.ShowState(selfState,selfMessage()); support.Text=SupportText;
             list=new ListView { Dock=DockStyle.Fill,View=View.Details,FullRowSelect=true,HideSelection=false,MultiSelect=false };
             list.Columns.Add(L("Plugin","プラグイン","插件","플러그인"),155);
             list.Columns.Add(L("State","状態","状态","상태"),65);
@@ -148,27 +164,12 @@ namespace RoxyzsActPlugin
             bar.Controls.Add(language);
             Button(bar,L("Enable","オン","启用","켜기"),()=>{var i=Selected;if(i!=null) Enable(i);});
             Button(bar,L("Disable","オフ","停用","끄기"),()=>{var i=Selected;if(i!=null){Stop(i);prefs.Enabled.Remove(i.Repo);RefreshList(i);}});
-            Button(bar,UpdateText,()=>{var i=Selected;if(i!=null){target.SelectedIndex=Array.IndexOf(entries,i)+1;tabs.SelectedTab=updates;Check(i);}});
+            Button(bar,L("Update selected","個別更新","更新所选","선택 업데이트"),()=>{var i=Selected;if(i!=null)UpdateChildren(new[]{i});});
+            Button(bar,L("Update all installed","一括更新","更新全部已安装插件","설치된 항목 모두 업데이트"),()=>UpdateChildren(entries.Where(i=>VersionOf(i)!=null).ToArray()));
             Button(bar,L("Refresh list","一覧を更新","刷新列表","목록 새로 고침"),()=>RefreshCatalog(false));
             Button(bar,"GitHub",()=>{if(Selected!=null) Open(Selected.Url);});
-            detail=new Label { Dock=DockStyle.Fill,AutoEllipsis=true,Padding=new Padding(10),BackColor=Color.White };
-            updates.Controls.Add(detail);
-            var actions=Bar(); updates.Controls.Add(actions);
-            target=new ComboBox { DropDownStyle=ComboBoxStyle.DropDownList, Width=166 };
-            target.Items.Add(Title);target.Items.AddRange(entries.Select(i=>i.Name).ToArray());target.SelectedIndex=0;
-            target.SelectedIndexChanged+=(s,e)=>ShowRelease();
-            actions.Controls.Add(target);
-            var link=new LinkLabel { Text="GitHub",AutoSize=true,Margin=new Padding(6,9,6,3) };
-            link.LinkClicked+=(s,e)=>Try(()=>Open(UpdateTarget.Url));actions.Controls.Add(link);
-            Button(actions,L("Check now","今すぐ確認","立即检查","지금 확인"),()=>Check(UpdateTarget));
-            Button(actions,L("Apply update","更新を適用","应用更新","업데이트 적용"),()=>Apply(UpdateTarget));
-            Button(actions,L("Later","後で","稍后","나중에"),()=>tabs.SelectedTab=config);
-            var auto=new CheckBox { Text=L("Check portal at startup","起動時にポータルの更新を確認","启动时检查门户更新","시작 시 포털 업데이트 확인"),Checked=prefs.Check,AutoSize=true };
-            auto.CheckedChanged+=(s,e)=>prefs.Check=auto.Checked; actions.Controls.Add(auto);
-            var card=Bar();card.BackColor=Color.FromArgb(255,244,218);support.Controls.Add(card);
-            card.Controls.Add(new Label { AutoSize=true,Text=L("Support is optional. All features are available to everyone.","支援は任意です。すべての機能をどなたでも利用できます。","支持完全自愿，所有功能均可免费使用。","후원은 선택 사항이며 모든 기능을 이용할 수 있습니다.") });
-            Button(card,L("Support Roxyz0501","Roxyz0501の開発を支援","支持 Roxyz0501","Roxyz0501 후원"),()=>Open("https://ko-fi.com/roxyz0501")).BackColor=Color.Gold;
-            RefreshList(); ShowRelease();
+            support.Controls.Add(BuildSupportLayout());
+            RefreshList();
         }
         void RefreshList(Entry selected=null)
         {
@@ -180,15 +181,15 @@ namespace RoxyzsActPlugin
             }
             list.EndUpdate();
         }
-        void ShowRelease()
+        void SetSelfState(UpdatePageState state,Func<string> message)
         {
-            var i=UpdateTarget; checkedVersions.TryGetValue(i,out var r);
-            detail.Text=i.Name+Environment.NewLine+L("Author","作者","作者","제작자")+"  Roxyz0501"+Environment.NewLine+L("Current","現在版","当前版本","현재 버전")+"  "+(VersionOf(i)??"—")+Environment.NewLine+
-                L("Latest","最新版","最新版本","최신 버전")+"  "+(r?.tag_name??"—")+Environment.NewLine+Environment.NewLine+(r?.Limited==true?LimitMessage: r?.body??"");
+            selfState=state;selfMessage=message;
+            updates.ShowState(state,message());
         }
-        void Run(Func<CancellationToken,Task<Action>> job)
+        void Run(Func<CancellationToken,Task<Action>> job,Action<Exception> failed=null)
         {
             if(worker!=null) return;
+            onFailure=failed;
             cancel=new CancellationTokenSource(TimeSpan.FromMinutes(2));
             var token=cancel.Token;
             worker=Task.Run(()=>job(token),token);
@@ -201,12 +202,26 @@ namespace RoxyzsActPlugin
             completion.Stop();
             var done=worker;worker=null;cancel.Dispose();cancel=null;
             config.Enabled=updates.Enabled=true;
-            Try(()=>{status.Text=Title;done.GetAwaiter().GetResult()();});
+            var failed=onFailure;onFailure=null;
+            try {status.Text=Title;done.GetAwaiter().GetResult()();}
+            catch(Exception ex){Try(()=>{throw ex;});failed?.Invoke(ex);}
         }
-        void Check(Entry i) => Run(async token=>{
-            var r=await packages.Latest(i,token,VersionOf(i));
-            return ()=>{checkedVersions[i]=r;ShowRelease();if(i==Entry.Self&&r.Version>Version.Parse(VersionOf(i)))tabs.SelectedTab=updates;};
-        });
+        void CheckSelf()
+        {
+            if(worker!=null||selfScheduled)return;
+            SetSelfState(UpdatePageState.Checking,()=>L("Checking…","確認中…","检查中…","확인 중…"));
+            Run(async token=>{
+                var r=await packages.Latest(Entry.Self,token,VersionOf(Entry.Self));
+                return ()=>{
+                    checkedVersions[Entry.Self]=r;
+                    bool available=r.Version>Version.Parse(VersionOf(Entry.Self));
+                    Func<string> message=()=>VersionOf(Entry.Self)+" → "+L("Latest","最新版","最新版本","최신 버전")+"  "+r.tag_name+Environment.NewLine+
+                        (available?(r.Limited?LimitMessage:r.body):L("Up to date","最新版です","已是最新版本","최신 버전입니다"));
+                    SetSelfState(available?UpdatePageState.Available:UpdatePageState.Ready,message);
+                    if(available)tabs.SelectedTab=updates;
+                };
+            },ex=>SetSelfState(UpdatePageState.Ready,()=>ErrorText(ex)));
+        }
         void RefreshCatalog(bool checkPortal)
         {
             var etag=prefs.CatalogJson==null?null:prefs.CatalogETag;
@@ -215,11 +230,11 @@ namespace RoxyzsActPlugin
                 try { data=await packages.FetchCatalog(etag,token); }
                 catch(Exception ex) when(checkPortal && !token.IsCancellationRequested)
                 {
-                    return ()=>{Try(()=>{throw ex;});Check(Entry.Self);};
+                    return ()=>{Try(()=>{throw ex;});CheckSelf();};
                 }
                 return ()=>{
                     if(data!=null) ApplyCatalog(data.Item1,data.Item2);
-                    if(checkPortal)Check(Entry.Self);
+                    if(checkPortal)CheckSelf();
                 };
             });
         }
@@ -279,41 +294,61 @@ namespace RoxyzsActPlugin
             if(!prefs.Enabled.Contains(i.Repo))prefs.Enabled.Add(i.Repo);
             RefreshList(i);
         }
-        void Apply(Entry i)
+        void PrepareSelf()
         {
-            if(!checkedVersions.TryGetValue(i,out var r)) {Check(i);return;}
-            string old=VersionOf(i);
-            if(old!=null && r.Version<=Packages.ParseVersion(old)){status.Text=L("Up to date","最新版です","已是最新版本","최신 버전입니다");return;}
-            string registered=null,original=null;
-            if(i==Entry.Self)
-            {
-                if(selfScheduled)return;
-                var registration=ActRegistry.Current().FirstOrDefault(p=>ReferenceEquals(p.Plugin,this));
-                registered=SelfUpdate.RegisteredPath(registration?.File?.FullName);
-                original=SelfUpdate.Hash(registered);
-            }
+            if(selfScheduled||worker!=null||!checkedVersions.TryGetValue(Entry.Self,out var release))return;
+            if(release.Version<=Version.Parse(VersionOf(Entry.Self)))return;
+            var registration=ActRegistry.Current().FirstOrDefault(p=>ReferenceEquals(p.Plugin,this));
+            var registered=SelfUpdate.RegisteredPath(registration?.File?.FullName);
+            var original=SelfUpdate.Hash(registered);
+            SetSelfState(UpdatePageState.Preparing,()=>L("Preparing…","更新を準備中…","准备中…","준비 중…"));
             Run(async token=>{
-                if(i==Entry.Self)
-                {
-                    var prepared=await packages.PrepareSelf(r,token);
-                    return ()=>{
-                        using(var act=Process.GetCurrentProcess())
-                        using(prepared.Schedule(registered,original,act.Id)){}
-                        selfScheduled=true;
-                        detail.Text=status.Text=L("Exit ACT to install, then restart ACT.","ACTを終了すると自動更新されます。その後ACTを起動してください。","退出 ACT 以自动安装，然后重新启动 ACT。","ACT를 종료하면 자동 설치됩니다. 이후 ACT를 다시 시작하세요.");
-                    };
-                }
-                await packages.Install(i,r,token);
+                var prepared=await packages.PrepareSelf(release,token);
                 return ()=>{
-                    if(active.ContainsKey(i))
-                    {
-                        Stop(i);
-                        try { Start(i,r.Version.ToString()); }
-                        catch { Start(i,old);throw; }
-                    }
-                    prefs.Versions[i.Repo]=r.Version.ToString();RefreshList(i);ShowRelease();
+                    using(var act=Process.GetCurrentProcess())
+                    using(prepared.Schedule(registered,original,act.Id)){}
+                    selfScheduled=true;
+                    SetSelfState(UpdatePageState.Prepared,()=>L("Exit ACT to install, then restart ACT.","ACTを終了すると自動更新されます。その後ACTを起動してください。","退出 ACT 以自动安装，然后重新启动 ACT。","ACT를 종료하면 자동 설치됩니다. 이후 ACT를 다시 시작하세요."));
                 };
-            });
+            },ex=>SetSelfState(UpdatePageState.PrepareFailed,()=>ErrorText(ex)));
+        }
+        void UpdateChildren(Entry[] items)
+        {
+            if(items.Length==0){status.Text=L("No installed plugins","導入済みのプラグインはありません","没有已安装的插件","설치된 플러그인이 없습니다");return;}
+            var problems=new List<string>();
+            int updated=0,unchanged=0;
+            Action<int> next=null;
+            next=index=>{
+                if(index==items.Length)
+                {
+                    status.Text=string.Format(L("Updated {0}, current {1}, failed {2}","更新 {0}件、最新版 {1}件、失敗 {2}件","已更新 {0}，已是最新 {1}，失败 {2}","업데이트 {0}, 최신 {1}, 실패 {2}"),updated,unchanged,problems.Count)
+                        +(problems.Count==0?"":" · "+string.Join(" / ",problems));
+                    return;
+                }
+                var item=items[index];
+                var old=VersionOf(item);
+                Run(async token=>{
+                    var release=await packages.Latest(item,token,old);
+                    bool upgrade=old==null||release.Version>Packages.ParseVersion(old);
+                    if(upgrade)await packages.Install(item,release,token);
+                    return ()=>{
+                        if(upgrade)
+                        {
+                            if(active.ContainsKey(item))
+                            {
+                                Stop(item);
+                                try{Start(item,release.Version.ToString());}catch{Start(item,old);throw;}
+                            }
+                            prefs.Versions[item.Repo]=release.Version.ToString();
+                            updated++;RefreshList(item);
+                        }
+                        else unchanged++;
+                        next(index+1);
+                    };
+                },ex=>{problems.Add(item.Name+" · "+status.Text);next(index+1);});
+                status.Text=string.Format("{0}/{1}  {2}",index+1,items.Length,item.Name);
+            };
+            next(0);
         }
         void Start(Entry i,string v)
         {
@@ -343,6 +378,7 @@ namespace RoxyzsActPlugin
                     }
                 }
                 ManagedPluginHost.Initialize(plugin,page,label,path,Path.GetDirectoryName(root),guideDirectory);
+                ChildTabs.HideManagementPages(page);
                 page.Controls.Add(label);page.Text=i.Name;page.ToolTipText=i.Name;
                 active.Add(i,Tuple.Create(plugin,page,label));
             }
