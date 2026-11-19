@@ -28,7 +28,7 @@ namespace RoxyzsActPlugin.Updater
                 var original=Required(values,"--original");
                 var key=BitConverter.ToString(System.Security.Cryptography.SHA256.Create().ComputeHash(
                     System.Text.Encoding.UTF8.GetBytes(target.ToUpperInvariant()))).Replace("-","");
-                using(var gate=new Mutex(false,"Local\\\\RoxyzsActPlugin-"+key))
+                using(var gate=new Mutex(false,"RoxyzsActPlugin-"+key))
                 {
                     try {if(!gate.WaitOne(TimeSpan.FromSeconds(30)))throw new IOException("Another update is in progress.");}
                     catch(AbandonedMutexException) { }

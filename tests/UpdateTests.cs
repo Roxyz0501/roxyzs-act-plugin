@@ -98,7 +98,8 @@ internal static class UpdateTests
                 {
                     try{Require(!helper.WaitForExit(450)&&SelfUpdate.Hash(registered)==original,"wait for host");}
                     finally{signal.Set();}
-                    Require(helper.WaitForExit(15000)&&helper.ExitCode==0,"updater exit");
+                    Require(helper.WaitForExit(15000),"updater timeout");
+                    if(helper.ExitCode!=0)throw new Exception(File.ReadAllText(Directory.GetFiles(root,"*.update-error.log",SearchOption.AllDirectories).Single()));
                 }
                 Require(SelfUpdate.Hash(registered)==SelfUpdate.Hash(typeof(Portal).Assembly.Location),"registered DLL replaced");
                 Require(SelfUpdate.Hash(Directory.GetFiles(root,"*.backup-*").Single())==original,"backup verified");
