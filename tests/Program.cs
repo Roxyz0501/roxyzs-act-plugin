@@ -53,7 +53,8 @@ class Program
             {
                 pref.Language=language;
                 Call(portal,"Build");
-                var page=(TabPage)Field(portal,"updates");
+                var page=(Roxyz.Act.UI.PluginUpdatePage)Field(portal,"updates");
+                page.SetLanguage(new[]{ "en", "ja", "zh", "ko" }[language]);
                 MeasureUpdateControls(page,g);
                 page.Size=bmp.Size;
                 page.DrawToBitmap(bmp,page.ClientRectangle);

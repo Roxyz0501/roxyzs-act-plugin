@@ -22,7 +22,7 @@ internal static class UpdateTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)
         {
             var result=new HttpResponseMessage(HttpStatusCode.OK);
-            string name="RoxyzsActPlugin-v1.3.1.zip";
+            string name="RoxyzsActPlugin-v1.3.2.zip";
             if(request.Method==HttpMethod.Head)
             {
                 Heads++; result.StatusCode=HttpStatusCode.Redirect; result.Headers.Location=new Uri(Location);
@@ -30,7 +30,7 @@ internal static class UpdateTests
             else if(request.RequestUri.Host=="api.github.com"){ Api++;result.StatusCode=(HttpStatusCode)ApiStatus; }
             else if(request.RequestUri.AbsolutePath.Contains("/expanded_assets/"))
             {
-                string prefix="/Roxyz0501/roxyzs-act-plugin/releases/download/v1.3.1/";
+                string prefix="/Roxyz0501/roxyzs-act-plugin/releases/download/v1.3.2/";
                 result.Content=new StringContent("<a href=\""+prefix+name+"\"></a><a href=\""+prefix+name+".sha256\"></a>");
             }
             else
@@ -65,7 +65,7 @@ internal static class UpdateTests
     {
         var item=Entry.Self;
         var token=CancellationToken.None;
-        foreach(var bad in new[]{"https://github.com/other/project/releases/tag/v1.3.1",item.Url+"/releases/tag/v1.3.1-beta",item.Url+"/releases/tag/v1.3.1?ref=x"})
+        foreach(var bad in new[]{"https://github.com/other/project/releases/tag/v1.3.2",item.Url+"/releases/tag/v1.3.2-beta",item.Url+"/releases/tag/v1.3.2?ref=x"})
         {
             try{Packages.ReleaseTag(item,new Uri(bad));throw new Exception("redirect accepted");}catch(InvalidDataException){}
         }
@@ -75,14 +75,14 @@ internal static class UpdateTests
         using(var tail=File.Open(registered,FileMode.Append))tail.WriteByte(1);
         string original=SelfUpdate.Hash(registered);
         Require(SelfUpdate.RegisteredPath(new Uri(registered).AbsoluteUri)==registered,"registered URI");
-        try{SelfUpdate.Stage(Package(true),root,"1.3.1",token);throw new Exception("unsafe ZIP accepted");}catch(InvalidDataException){}
+        try{SelfUpdate.Stage(Package(true),root,"1.3.2",token);throw new Exception("unsafe ZIP accepted");}catch(InvalidDataException){}
         foreach(int code in new[]{403,429})
         {
-            var transport=new Transport{Location=item.Url+"/releases/tag/v1.3.1",ApiStatus=code,Zip=zip};
+            var transport=new Transport{Location=item.Url+"/releases/tag/v1.3.2",ApiStatus=code,Zip=zip};
             using(var client=new Packages(root,transport))
             {
-                client.Latest(item,token,"1.3.1").GetAwaiter().GetResult();
-                client.Latest(item,token,"1.3.1").GetAwaiter().GetResult();
+                client.Latest(item,token,"1.3.2").GetAwaiter().GetResult();
+                client.Latest(item,token,"1.3.2").GetAwaiter().GetResult();
                 Require(transport.Heads==1&&transport.Api==0,"unchanged check");
                 var release=client.Latest(item,token,"1.1.0").GetAwaiter().GetResult();
                 Require(release.Limited&&transport.Api==1&&transport.Assets==0,"rate-limit detection");
@@ -110,7 +110,7 @@ internal static class UpdateTests
             .Single(m=>m.Name=="ReplaceWithBackup"&&m.GetParameters().Length==5);
         var restoredHash=SelfUpdate.Hash(registered);
         Action<string,string> fail=(source,target)=>{File.WriteAllText(target,"partial");throw new IOException("test failure");};
-        try{replace.Invoke(null,new object[]{typeof(Portal).Assembly.Location,registered,restoredHash,"1.3.1",fail});throw new Exception("expected failure");}
+        try{replace.Invoke(null,new object[]{typeof(Portal).Assembly.Location,registered,restoredHash,"1.3.2",fail});throw new Exception("expected failure");}
         catch(TargetInvocationException ex)when(ex.InnerException is IOException){}
         Require(SelfUpdate.Hash(registered)==restoredHash,"restore after partial replacement");
         Console.WriteLine("HEAD cache, zero same-version REST, 403/429 fallback, corrupt packages, and post-exit replacement passed.");

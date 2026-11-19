@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>1.3.1</Version>
+    <Version>1.3.2</Version>
     <Company>Roxyz0501</Company>
     <Authors>Roxyz0501</Authors>
     <ActPath Condition="'$(ActPath)' == ''">$(MSBuildProgramFiles32)\Advanced Combat Tracker\Advanced Combat Tracker.exe</ActPath>

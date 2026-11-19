@@ -14,7 +14,9 @@ namespace Roxyz.Act.UI
         private readonly CheckBox checkStartup = Check();
         private readonly Button checkNow = new Button(), updateNow = new Button(), later = new Button();
         private readonly string repositoryName, installedVersion;
-        private Font bodyFont, titleFont;
+        // WinForms may keep an already assigned, equal Font instance. Keep all
+        // owned fonts alive until the controls are disposed (at most four pairs).
+        private readonly Font[] bodyFonts = new Font[4], titleFonts = new Font[4];
         private int language;
         private bool settingStartup;
         public event EventHandler CheckRequested, InstallRequested, LaterRequested, StartupChanged;
@@ -58,14 +60,12 @@ namespace Roxyz.Act.UI
             string lang = (code ?? "").Split('-', '_')[0].ToLowerInvariant();
             language = lang == "ja" ? 1 : lang == "zh" ? 2 : lang == "ko" ? 3 : 0;
             string family = T("Segoe UI", "Yu Gothic UI", "Microsoft YaHei UI", "Malgun Gothic");
-            var oldBody = bodyFont;
-            var oldTitle = titleFont;
-            bodyFont = new Font(family, Control.DefaultFont.Size, FontStyle.Regular);
-            titleFont = new Font(family, 11f, FontStyle.Bold);
-            Font = bodyFont;
-            updateTitle.Font = titleFont;
-            oldBody?.Dispose();
-            oldTitle?.Dispose();
+            if (bodyFonts[language] == null)
+                bodyFonts[language] = new Font(family, Control.DefaultFont.Size, FontStyle.Regular);
+            if (titleFonts[language] == null)
+                titleFonts[language] = new Font(family, 11f, FontStyle.Bold);
+            Font = bodyFonts[language];
+            updateTitle.Font = titleFonts[language];
             Text = T("Updates", "更新", "更新", "업데이트");
             updateTitle.Text = T("Updates", "更新", "更新", "업데이트");
             checkStartup.Text = T("Check for updates when the plugin starts", "プラグイン起動時に更新を確認する", "插件启动时检查更新", "플러그인 시작 시 업데이트 확인");
@@ -109,7 +109,12 @@ namespace Roxyz.Act.UI
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
-            if (disposing) { bodyFont?.Dispose(); titleFont?.Dispose(); }
+            if (disposing)
+                for (int i = 0; i < bodyFonts.Length; i++)
+                {
+                    bodyFonts[i]?.Dispose(); bodyFonts[i] = null;
+                    titleFonts[i]?.Dispose(); titleFonts[i] = null;
+                }
         }
     }
 }
