@@ -248,12 +248,12 @@ namespace RoxyzsActPlugin
             if(active.ContainsKey(i))return;
             var v=VersionOf(i);
             if(v!=null&&File.Exists(packages.Local(i,v))){Activate(i,v);return;}
-            var registered=ActGlobals.oFormActMain?.ActPlugins.FirstOrDefault(p=>
-                string.Equals(p?.pluginFile?.Name,i.Dll+".dll",StringComparison.OrdinalIgnoreCase));
-            if(registered!=null && registered.pluginFile.Exists)
+            var registered=ActRegistry.Current().FirstOrDefault(p=>
+                string.Equals(p.File?.Name,i.Dll+".dll",StringComparison.OrdinalIgnoreCase));
+            if(registered?.File?.Exists==true)
             {
-                if(registered.cbEnabled?.Checked==true) throw Duplicate(i);
-                var source=registered.pluginFile.FullName;
+                if(registered.Enabled) throw Duplicate(i);
+                var source=registered.File.FullName;
                 var name=AssemblyName.GetAssemblyName(source);
                 if(name.Name!=i.Dll)throw new InvalidDataException(i.Name);
                 var version=name.Version.ToString(3);
@@ -288,8 +288,8 @@ namespace RoxyzsActPlugin
             if(i==Entry.Self)
             {
                 if(selfScheduled)return;
-                var registration=ActGlobals.oFormActMain?.ActPlugins.FirstOrDefault(p=>ReferenceEquals(p?.pluginObj,this));
-                registered=SelfUpdate.RegisteredPath(registration?.pluginFile?.FullName);
+                var registration=ActRegistry.Current().FirstOrDefault(p=>ReferenceEquals(p.Plugin,this));
+                registered=SelfUpdate.RegisteredPath(registration?.File?.FullName);
                 original=SelfUpdate.Hash(registered);
             }
             Run(async token=>{
@@ -318,8 +318,8 @@ namespace RoxyzsActPlugin
         void Start(Entry i,string v)
         {
             if(v==null) throw new FileNotFoundException(i.Name);
-            if(ActGlobals.oFormActMain?.ActPlugins.Any(p=>p?.cbEnabled?.Checked==true &&
-                (string.Equals(p.pluginFile?.Name,i.Dll+".dll",StringComparison.OrdinalIgnoreCase)||p.pluginObj?.GetType().Assembly.GetName().Name==i.Dll))==true)
+            if(ActRegistry.Current().Any(p=>p.Enabled &&
+                (string.Equals(p.File?.Name,i.Dll+".dll",StringComparison.OrdinalIgnoreCase)||p.Plugin?.GetType().Assembly.GetName().Name==i.Dll)))
                 throw Duplicate(i);
             var path=packages.Local(i,v);
             var identity=AssemblyName.GetAssemblyName(path);
@@ -332,7 +332,18 @@ namespace RoxyzsActPlugin
             tabs.TabPages.Add(page);
             try
             {
-                plugin.InitPlugin(page,label);page.Controls.Add(label);page.Text=i.Name;page.ToolTipText=i.Name;
+                var guideDirectory=Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(path)),"GuideData");
+                if(i.Dll=="BahamutGuide")
+                {
+                    var standalone=ActRegistry.Current().FirstOrDefault(p=>string.Equals(p.File?.Name,"BahamutGuide.dll",StringComparison.OrdinalIgnoreCase));
+                    if(standalone?.File?.DirectoryName!=null)
+                    {
+                        var existing=Path.Combine(standalone.File.DirectoryName,"GuideData");
+                        if(Directory.Exists(existing))guideDirectory=existing;
+                    }
+                }
+                ManagedPluginHost.Initialize(plugin,page,label,path,Path.GetDirectoryName(root),guideDirectory);
+                page.Controls.Add(label);page.Text=i.Name;page.ToolTipText=i.Name;
                 active.Add(i,Tuple.Create(plugin,page,label));
             }
             catch { try {plugin.DeInitPlugin();} finally {page.Dispose();label.Dispose();} throw; }

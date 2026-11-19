@@ -12,10 +12,46 @@ using Advanced_Combat_Tracker;
 
 class Program
 {
+    sealed class FieldRegistry { public object[] ActPlugins; }
+    sealed class FieldRegistration
+    {
+        public FileInfo pluginFile;
+        public object pluginObj;
+        public CheckBox cbEnabled;
+    }
+    static void RegistryCompatibility(string root)
+    {
+        var file=new FileInfo(Path.Combine(root,"登録 プラグイン.dll"));
+        var plugin=new object();
+        using(var check=new CheckBox { Checked=true })
+        {
+            var fieldHost=new FieldRegistry { ActPlugins=new object[]{null,new FieldRegistration {pluginFile=file,pluginObj=plugin,cbEnabled=check}} };
+            var field=ActRegistry.From(fieldHost).Single();
+            Assert(field.Enabled&&field.File.FullName==file.FullName&&ReferenceEquals(field.Plugin,plugin),"ACT field registration");
+            var propertyHost=new {ActPlugins=new[]{new {pluginFile=file,pluginObj=plugin,cbEnabled=false}}};
+            var property=ActRegistry.From(propertyHost).Single();
+            Assert(!property.Enabled&&property.File.FullName==file.FullName&&ReferenceEquals(property.Plugin,plugin),"ACT property registration");
+        }
+    }
     const BindingFlags Private=BindingFlags.NonPublic|BindingFlags.Instance;
     static object Field(Portal p,string name)=>typeof(Portal).GetField(name,Private).GetValue(p);
     static void Call(Portal p,string method,params object[] args)=>typeof(Portal).GetMethod(method,Private).Invoke(p,args);
     static void Assert(bool ok,string message){if(!ok)throw new Exception(message);}
+    static void VerifyGuide(string dll,string root)
+    {
+        var type=Assembly.LoadFile(dll).GetType("BahamutGuide.BahamutGuidePlugin",true);
+        var plugin=(IActPluginV1)Activator.CreateInstance(type);
+        using(var page=new TabPage())using(var label=new Label())
+        {
+            try
+            {
+                ManagedPluginHost.Initialize(plugin,page,label,dll,root,Path.Combine(root,"GuideData"));
+                Assert(page.Controls.Count>0,"Bahamut Guide settings did not open");
+            }
+            finally{plugin.DeInitPlugin();}
+        }
+        Console.WriteLine("Hosted Bahamut Guide "+AssemblyName.GetAssemblyName(dll).Version);
+    }
     [STAThread] static void Main(string[] args)
     {
         if(args.Length==2 && args[0]=="--host")
@@ -40,6 +76,7 @@ class Program
         {
             using(var packages=new Packages(Path.Combine(root,"packages")))
             {
+                RegistryCompatibility(root);
                 UpdateTests.Run(root);
                 if(args.Contains("--verify-self"))
                 {
@@ -55,7 +92,14 @@ class Program
                     using(var cts=new CancellationTokenSource(TimeSpan.FromSeconds(90)))
                     {
                         var r=packages.Latest(i,cts.Token).GetAwaiter().GetResult();
-                        Assert(File.Exists(packages.Install(i,r,cts.Token).GetAwaiter().GetResult()),"missing DLL");
+                        var dll=packages.Install(i,r,cts.Token).GetAwaiter().GetResult();
+                        Assert(File.Exists(dll),"missing DLL");
+                        if(i.Dll=="BahamutGuide")
+                        {
+                            VerifyGuide(dll,root);
+                            var legacy=Environment.GetEnvironmentVariable("PORTAL_TEST_LEGACY_GUIDE");
+                            if(!string.IsNullOrEmpty(legacy))VerifyGuide(legacy,root);
+                        }
                         Console.WriteLine(i.Name+" "+r.tag_name);
                     }
                 }
